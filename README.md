@@ -11,12 +11,6 @@ On macOS or Linux:
 brew install interesta-ai/tap/orchestrator
 ```
 
-On Windows:
-
-```powershell
-winget install --id Interesta.Orchestrator --exact
-```
-
 ## License
 
 The Orchestrator CLI is proprietary software from Interesta Inc. This repository
