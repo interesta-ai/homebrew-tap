@@ -1,25 +1,25 @@
-# Generated with JReleaser 1.25.0 at 2026-07-26T06:17:43.893536546Z
+# Generated with JReleaser 1.25.0 at 2026-07-26T08:19:03.015721778Z
 
 class Orchestrator < Formula
   desc "Local runner for Interesta Orchestrator"
   homepage "https://www.interesta.ai/orchestrator"
-  version "0.3.0"
+  version "0.3.1"
 
   if OS.linux? && Hardware::CPU.arm? && Hardware::CPU.is_64_bit?
-    url "https://github.com/interesta-ai/homebrew-tap/releases/download/v0.3.0/orchestrator-0.3.0-linux-aarch64.zip"
-    sha256 "800e305fdff53d3c76462cef12d7d6fde8eae74d3bb857d49dcac015131a1518"
+    url "https://github.com/interesta-ai/homebrew-tap/releases/download/v0.3.1/orchestrator-0.3.1-linux-aarch64.zip"
+    sha256 "c0912b6e0c28583b55c86de6d2e96252737a62eaa0ef47b54681413fb518e9f0"
   end
   if OS.linux? && Hardware::CPU.intel?
-    url "https://github.com/interesta-ai/homebrew-tap/releases/download/v0.3.0/orchestrator-0.3.0-linux-x86_64.zip"
-    sha256 "9e321145069d98e82072bac4ffe2047fcda86089c46378e8a6b3964898c0b0af"
+    url "https://github.com/interesta-ai/homebrew-tap/releases/download/v0.3.1/orchestrator-0.3.1-linux-x86_64.zip"
+    sha256 "c99efa3dc32306c0d3dce190da0f58393fea2c4bfaaba0cef2f371e33a40a7a1"
   end
   if OS.mac? && Hardware::CPU.arm?
-    url "https://github.com/interesta-ai/homebrew-tap/releases/download/v0.3.0/orchestrator-0.3.0-macos-aarch64.zip"
-    sha256 "66a669046fed7202277717ef5895d85787f35ecb544e0bbaab18936431e119f8"
+    url "https://github.com/interesta-ai/homebrew-tap/releases/download/v0.3.1/orchestrator-0.3.1-macos-aarch64.zip"
+    sha256 "ce6bfae7afbdcefe9917d96fde61a59ab461749a3d993cd455cb32e6825a090f"
   end
   if OS.mac? && Hardware::CPU.intel?
-    url "https://github.com/interesta-ai/homebrew-tap/releases/download/v0.3.0/orchestrator-0.3.0-macos-x86_64.zip"
-    sha256 "c9f8e7ff9d20af79773589594b46ee3ca2e1d1cd4ea99df35ce1c17b4ec6ca18"
+    url "https://github.com/interesta-ai/homebrew-tap/releases/download/v0.3.1/orchestrator-0.3.1-macos-x86_64.zip"
+    sha256 "43657c207f7988787fd0a5131d6d38aa63b7ef4404968e299d147a37daf97f0c"
   end
 
   def install
@@ -28,6 +28,6 @@ class Orchestrator < Formula
 
   test do
     output = shell_output("#{bin}/orchestrator --version")
-    assert_match "0.3.0", output
+    assert_match "0.3.1", output
   end
 end
