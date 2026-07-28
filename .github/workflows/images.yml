@@ -1,0 +1,182 @@
+name: Container images
+
+on:
+  pull_request:
+    paths:
+      - "images/**"
+      - ".github/workflows/images.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "images/**"
+      - ".github/workflows/images.yml"
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: interesta-ai
+
+jobs:
+  runtime-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Check and test runtime scripts
+        run: |
+          node --check images/claude-runner.mjs
+          node --check images/inference-proxy.mjs
+          node --test images/claude-runner.test.mjs images/inference-proxy.test.mjs
+
+  images:
+    needs: runtime-tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: inference-proxy
+            package: orchestrator-inference-proxy
+            description: Trusted inference proxy for Interesta Orchestrator
+          - target: code-agent
+            package: orchestrator-code-agent
+            description: Code agent with Chromium and Playwright for Interesta Orchestrator
+          - target: repository-review-agent
+            package: orchestrator-repository-review-agent
+            description: Repository review agent for Interesta Orchestrator
+          - target: pr-review-agent
+            package: orchestrator-pr-review-agent
+            description: Pull request review agent for Interesta Orchestrator
+          - target: issue-planner-agent
+            package: orchestrator-issue-planner-agent
+            description: Issue planning agent for Interesta Orchestrator
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Define image metadata
+        id: metadata
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.package }}
+          tags: type=raw,value=latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/interesta-ai/homebrew-tap
+            org.opencontainers.image.title=${{ matrix.package }}
+            org.opencontainers.image.description=${{ matrix.description }}
+      - name: Build native image for smoke tests
+        uses: docker/build-push-action@v6
+        with:
+          context: ./images
+          file: ./images/Dockerfile
+          target: ${{ matrix.target }}
+          load: true
+          tags: orchestrator-smoke:${{ matrix.target }}
+          labels: ${{ steps.metadata.outputs.labels }}
+      - name: Smoke test image contract
+        run: |
+          docker run --rm --entrypoint sh \
+            -e IMAGE_TARGET="${{ matrix.target }}" \
+            "orchestrator-smoke:${{ matrix.target }}" -c '
+              set -eu
+              node --version | grep -Eq "^v24\."
+
+              if [ "$IMAGE_TARGET" = "inference-proxy" ]; then
+                node --check /opt/orchestrator/inference-proxy.mjs
+                node --check /opt/orchestrator/claude-runner.mjs
+                node /opt/orchestrator/claude-runner.mjs --sdk-smoke
+                test -d /opt/orchestrator/node_modules
+                for unexpected in codex gh mise cc playwright; do
+                  if command -v "$unexpected" >/dev/null 2>&1; then
+                    echo "Unexpected command in inference proxy: $unexpected" >&2
+                    exit 1
+                  fi
+                done
+                exit 0
+              fi
+
+              node --check /opt/orchestrator/claude-runner.mjs
+              node /opt/orchestrator/claude-runner.mjs --sdk-smoke
+              for required in bash codex curl gh git jq mise node pnpm python3 rg ssh tar unzip zip; do
+                command -v "$required" >/dev/null
+              done
+              pnpm --version | grep -Eq "^11\.9\.0$"
+              python3 -m pip --version
+              python3 -m venv /tmp/orchestrator-smoke-venv
+              codex --version
+
+              case "$IMAGE_TARGET" in
+                code-agent|repository-review-agent|pr-review-agent)
+                  cc --version
+                  make --version
+                  ;;
+                *)
+                  if command -v cc >/dev/null 2>&1; then
+                    echo "Unexpected compiler in $IMAGE_TARGET" >&2
+                    exit 1
+                  fi
+                  ;;
+              esac
+
+              if [ "$IMAGE_TARGET" = "code-agent" ]; then
+                playwright --version
+                playwright install --list | grep -qi chromium
+              elif command -v playwright >/dev/null 2>&1; then
+                echo "Unexpected Playwright in $IMAGE_TARGET" >&2
+                exit 1
+              fi
+            '
+      - name: Build multi-architecture image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./images
+          file: ./images/Dockerfile
+          target: ${{ matrix.target }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+
+  verify-published:
+    if: github.event_name == 'push'
+    needs: images
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - orchestrator-inference-proxy
+          - orchestrator-code-agent
+          - orchestrator-repository-review-agent
+          - orchestrator-pr-review-agent
+          - orchestrator-issue-planner-agent
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - name: Verify public multi-architecture package
+        run: |
+          reference="${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.package }}:latest"
+          manifest="$(docker buildx imagetools inspect "$reference")"
+          grep -q "linux/amd64" <<EOF
+          $manifest
+          EOF
+          grep -q "linux/arm64" <<EOF
+          $manifest
+          EOF
+          docker pull --platform linux/amd64 "$reference"
